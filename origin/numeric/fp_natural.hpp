@@ -1,228 +1,17 @@
 // Copyright (c) 2008-2016 Andrew Sutton
 // All rights reserved
 
-#ifndef ORIGIN_NUMERIC_NATURAL_HPP
-#define ORIGIN_NUMERIC_NATURAL_HPP
+#ifndef ORIGIN_NUMERIC_FP_NATURAL_HPP
+#define ORIGIN_NUMERIC_FP_NATURAL_HPP
 
-// Defines fixed and arbitrary precision natural numbers and their associated
-// operations.
-
-#include <origin/digit.hpp>
-
-#include <array>
-#include <vector>
+#include <origin/numeric/number.hpp>
 
 
 namespace origin {
 namespace numeric {
 
 // -------------------------------------------------------------------------- //
-// Concepts
-
-// True for all unsigned integers that are non-zero.
-//
-// TODO: Find a better module for this concept.
-template<std::size_t N>
-concept bool Nonzero()
-{
-  return N > 0;
-}
-
-
-// -------------------------------------------------------------------------- //
-// Digit Range Algorithms                                   [digit.algorithm] //
-//
-// TODO: Rewrite all of these to use iterators instead of pointers. Or ranges?
-
-// Returns the number of significant digits in a number. If sigdig(f, l) == n,
-// then the position of the most significant digit is n - 1.
-//
-// TODO: This algorithm has the wrong name, and probably does the wrong thing.
-// It might be better to simply return an iterator to the most significant
-// digit.
-template<Digit D>
-int
-sigdig(D* first, D* limit)
-{
-  while (limit != first) {
-    --limit;
-    if (*limit != D(0))
-      return limit - first + 1;
-  }
-  return 0;
-}
-
-
-// Initialize the digits in [first, limit) from the value n. This returns the
-// residual value of n computed from the initialization of digits. If the
-// number cannot be stored in limit - first digits, then the residue will
-// be non-zero.
-// 
-// If n is -1, then the resulting range will represent the maximum value for 
-// those digits.
-//
-// FIXME: This results spurious overflow if last - first < sizeof(T) * CHAR_BIT 
-// and n == -1 (unsigned)
-template<Digit D, Unsigned T>
-T
-fill_converted(D* first, D* limit, T n)
-{
-  // Handle the max case separately.
-  if (n == T(-1)) {
-    std::fill(first, limit, max<D>());
-    return 0;
-  }
-
-  while (first != limit && n != 0) {
-    *first++ = n % radix<D>();
-    n /= radix<D>();
-  }
-  std::fill(first, limit, D(0));
-  return n;
-}
-
-
-// Add a digit to the number in [first, last).
-template<Digit D>
-D
-add(D* out, D const* first, D const* limit, D n)
-{
-  D c = n;
-  while (first != limit) {
-    auto s = add(*first++, D(0), c);
-    *out++ = s.first;
-    c = s.second;
-  }
-  return c;
-}
-
-
-// Add the digits in [first1, first1 + n) to those in [first2, first2 + n) and 
-// store the results in [out, out + n). Returns the carry digit.
-template<Digit D>
-D
-add_n(D* out, D const* first1, D const* first2, int n)
-{
-  D c = 0;
-  while (n != 0) {
-    auto s = add(*first1++, *first2++, c);
-    *out++ = s.first;
-    c = s.second;
-    --n;
-  }
-  return c;
-}
-
-
-// Subtract the digits in [first2, first2 + n) from those in 
-// [first1, first1 + n) and store the results in [out, out + n). Returns a
-// borrowed digit.
-template<Digit D>
-D
-sub_n(D* out, D const* first1, D const* first2, int n)
-{
-  D b = 0;
-  while (n != 0) {
-    auto s = sub(*first1++, *first2++, b);
-    *out++ = s.first;
-    b = s.second;
-    --n;
-  }
-  return b;
-}
-
-
-// Multiply each digit in [first, limit) by n. Returns the final carry.
-template<Digit D>
-D
-mul(D* out, D const* first, D const* limit, D n)
-{
-  D c(0);
-  while (first != limit) {
-    auto p = mul(*first++, n);
-    auto s = add(p.first, c);
-    // TODO: I don't believe that the should ever actually carry. Prove it.
-    *out++ = s.first;
-    assert(s.second == 0); 
-    c = p.second + s.second;
-  }
-  return c;
-}
-
-
-// Shift k digits to the left.
-//
-// FIXME: This algorithm requires k * n shifts, although k <= digits<D>().
-// Still, it would be more effective to determine when digit copies are
-// sufficient and when shifts must actually be performed.
-//
-// TODO: Provide an overflow buffer to accept bits shifted out of the
-// representation.
-template<Digit D>
-void
-lsh_n(D* out, D const* in, int k, int n)
-{
-  assert(k < n);
-  while (k != 0) {
-    D c = 0;
-    while (n != 0) {
-      auto x = twice(*in++, c);
-      *out++ = x.first;
-      c = x.second;
-      --n;
-    }
-    --k;
-  }
-}
-
-
-// Shift k digits to the right. This shifts each digit starting from the
-// most significant and working toward the least. The remainder in each
-// shift is propagated to the next digit.
-//
-// TODO: Provide an overflow buffer to accept bits shifted out of the
-// representation.
-template<Digit D>
-void
-rsh_n(D* out, D const* in, int k, int n)
-{
-  while (k != 0) {
-    D const* limit = in + n;
-    D* out_limit = out + n;
-    D r = 0;
-    while (n != 0) {
-      auto x = half(*--limit, r);
-      *--out_limit = x.first;
-      r = x.second;
-      --n;
-    }
-    --k;
-  }
-}
-
-
-// Returns true if the digit sequence in [p - n, p) is lexicographically
-// less than that in [q - n, q). Digits are compared from the most significant
-// to the least.
-template<Digit D>
-bool
-less_n(D const* p, D const* q, int n)
-{
-  while (n != 0) {
-    --p;
-    --q;
-    if (*p < *q)
-      return true;
-    if (*q < *p)
-      return false;
-    --n;
-  }
-  return false;
-}
-
-
-// -------------------------------------------------------------------------- //
-// Fixed precision natural number
+// Fixed precision natural numbers                               [natural.fp] //
 
 // A generic fixed point natural number. This is a fixed-length sequence of 
 // P digits with radix R.
@@ -232,7 +21,8 @@ less_n(D const* p, D const* q, int n)
 //
 // TODO: Factor this class into two parts: one that provides storage and
 // access and a second that adds all of the operators. We should define our
-// algorithms only in terms of the data representation.
+// algorithms only in terms of the data representation. Also, add allocator
+// support.
 //
 // TODO: Store a pointer to the most significant digit so that we don't
 // end up with unnecessarily expensive computations for relatively small
@@ -240,6 +30,9 @@ less_n(D const* p, D const* q, int n)
 // 
 // TODO: Support conversions between numbers in other bases? That would make
 // sense.
+//
+// TODO: Factor multiplication and division algorithms into a generic library
+// so they can be reused by different numeric facilities.
 //
 // TODO: An ideal "natural" type would have radix 32 or 64 as the underlying
 // digit type, but self-advertise as having radix 2 since the underlying
@@ -566,12 +359,8 @@ operator>>(fp_natural<P, R>& n, int k)
 }
 
 
-// -------------------------------------------------------------------------- //
-// Multiplication and division
-
 namespace detail
 {
-
 
 // Compute r = a * b.
 //
@@ -600,7 +389,6 @@ long_multiply_non_overflowing(fp_natural<P2, R>& r,
   }
 }
 
-
 // Perform peasant multiplication on two numbers that have been appropriately
 // expanded to accommodate the result.
 //
@@ -620,7 +408,6 @@ peasant_multiply_recursive(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
     r += a;
   return r;
 }
-
 
 // Peasant multiplication.
 //
@@ -726,10 +513,6 @@ operator%(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
   return r %= b;
 }
 
-
-// -------------------------------------------------------------------------- //
-// Streaming
-
 // TODO: Don't print leading non-significant digits?
 template<Nonzero P, Radix R>
 std::ostream& 
@@ -737,214 +520,6 @@ operator<<(std::ostream& os, fp_natural<P, R> const& n)
 {
   for (auto iter = n.rbegin(); iter != n.rend(); ++iter)
     os << *iter;
-  return os;
-}
-
-
-// -------------------------------------------------------------------------- //
-// Arbitrary precision natural number
-
-// A generic arbitrary precision natural number. This is a variable-length
-// sequence of digits in base R.
-//
-// TODO: Small numbers should not allocate.
-template<Radix R>
-struct ap_natural
-{
-  using digit_type = digit<R>;
-  using storage_type = std::vector<digit_type>;
-  using iterator = digit_type*;
-  using const_iterator = digit_type const*;
-
-  ap_natural();
-  ap_natural(std::uintmax_t);
-
-  // Digit access.
-  digit_type operator[](std::size_t n) const { return digs_[n]; }
-  digit_type& operator[](std::size_t n) { return digs_[n]; }
-
-  // Observers
-  std::size_t size() const { return digs_.size(); }
-  std::size_t digits() const { return size(); }
-  std::size_t sig_digits() const { return sigdig(begin(), end()); }
-
-  // Memory
-  void extend(std::size_t n) { 
-    if (n > size())
-      digs_.resize(n, digit_type(0)); 
-  }
-
-  // Iterators
-  const_iterator begin() const { return digs_.data(); }
-  const_iterator end() const { return begin() + size(); }
-  iterator begin() { return digs_.data(); }
-  iterator end() { return begin() + size(); }
-  
-  storage_type digs_;
-};
-
-template<Radix R>
-ap_natural<R>::ap_natural()
-  : digs_(1)
-{
-  digs_[0] = 0;
-}
-
-
-// Support initialization from standard integer types.
-template<Radix R>
-ap_natural<R>::ap_natural(std::uintmax_t n)
-  : digs_(algo::digits(n, R))
-{
-  fill_converted(begin(), end(), n);
-}
-
-
-// -------------------------------------------------------------------------- //
-// Comparison
-
-// Two ap numbers are equal iff the corresponding significant digits are the 
-// same.
-template<Radix R>
-inline bool
-operator==(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  std::size_t n1 = a.sig_digits();
-  std::size_t n2 = a.sig_digits();
-  if (n1 != n2)
-    return false;
-  else
-    return std::equal(a.begin(), a.begin() + n1, b.begin());
-}
-
-
-template<Radix R>
-inline bool
-operator!=(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  return !(a == b);
-}
-
-
-// A number with fewer signficant digits is less than any number with more.
-// For numbers of the same significance, lexicographically compare their
-// digits.
-template<Radix R>
-inline bool
-operator<(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  std::size_t n1 = a.sig_digits();
-  std::size_t n2 = a.sig_digits();
-  if (n1 < n2)
-    return true;
-  if (n2 < n1)
-    return false;
-  return less_n(a.end(), b.end(), n1);
-}
-
-
-template<Radix R>
-inline bool
-operator>(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  return b < a;
-}
-
-
-template<Radix R>
-inline bool
-operator<=(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  return !(b < a);
-}
-
-
-template<Radix R>
-inline bool
-operator>=(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  return !(a < b);
-}
-
-// -------------------------------------------------------------------------- //
-// Predicates
-
-// Returns true if the number is odd.
-template<Radix R>
-inline bool
-is_odd(ap_natural<R> const& n)
-{
-  return is_odd(n[0]);
-}
-
-
-// Return true when the number is even.
-template<Radix R>
-inline bool
-is_even(ap_natural<R> const& n)
-{
-  return is_even(n[0]);
-}
-
-
-// -------------------------------------------------------------------------- //
-// Addition and subtraction
-
-template<Radix R>
-ap_natural<R>&
-operator+=(ap_natural<R>& a, ap_natural<R> const& b)
-{
-  // FIXME: This definitely over-allocates memory. We should only extend
-  // the number if the number of significant digits exceeds the size of a.
-  std::size_t n = std::max(a.digits(), b.digits());
-  a.extend(n + 1);
-    Digit c = add_n(a.begin(), a.begin(), b.begin(), b.digits());
-  auto iter = a.begin() + b.digits();
-  add(iter, iter, a.end(), c);
-  return a;
-}
-
-
-template<Radix R>
-ap_natural<R>
-operator+(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  ap_natural<R> r = a;
-  return r += b;
-}
-
-
-template<Radix R>
-ap_natural<R>&
-operator-=(ap_natural<R>& a, ap_natural<R> const& b)
-{
-  // sub_n(a.begin(), a.begin(), b.begin(), P);
-  return a;
-}
-
-
-template<Radix R>
-ap_natural<R>
-operator-(ap_natural<R> const& a, ap_natural<R> const& b)
-{
-  ap_natural<R> r = a;
-  return r -= b;
-}
-
-
-// -------------------------------------------------------------------------- //
-// Streaming
-
-// TODO: Don't print leading non-significant digits?
-template<Radix R>
-std::ostream& 
-operator<<(std::ostream& os, ap_natural<R> const& n)
-{
-  auto* p = n.end();
-  while (p != n.begin()) {
-    --p;
-    os << *p;
-  }
   return os;
 }
 
@@ -981,32 +556,7 @@ struct numeric_limits<::origin::numeric::fp_natural<P, R>>
 };
 
 
-// Specializations of numeric limits for digits.
-//
-// TODO: There are a bunch of other properties that could be filled out.
-template<::origin::numeric::Radix R>
-struct numeric_limits<::origin::numeric::ap_natural<R>>
-{
-  using T = ::origin::numeric::ap_natural<R>;
-
-  static constexpr bool is_specialized = true;
-  static constexpr bool is_signed = false;
-  static constexpr bool is_integer = true;
-  static constexpr bool is_exact = true;
-  static constexpr bool is_modular = false;
-
-  // The radix of a bit data type is R.
-  static constexpr std::uintmax_t radix = R;
-
-  // A fixed-point number has a precise number of digits.
-  // static constexpr int digits = P;
-
-  static constexpr T min() { return 0; }
-  // static constexpr T max() { return -1; } // FIXME: Wrong!
-};
-
-
-
 } // namespace std
+
 
 #endif

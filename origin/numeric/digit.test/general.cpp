@@ -1,5 +1,7 @@
+// Copyright (c) 2008-2016 Andrew Sutton
+// All rights reserved
 
-#include "digit.hpp"
+#include <origin/numeric/digit.hpp>
 
 #include <bitset>
 #include <vector>

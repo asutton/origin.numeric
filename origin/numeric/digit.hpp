@@ -16,7 +16,7 @@
 // This library is not efficient for digits whose base is not m + 1 where m is 
 // the maximum value of an unsigned standard integer type.
 
-#include <origin/concepts.hpp>
+#include <origin/numeric/concepts.hpp>
 
 #include <cassert>
 #include <cstddef>
@@ -372,8 +372,6 @@ msd(T n)
 // a runtime cost for extending integers. This probably negligible for small
 // digits, but when r is 2^32 or 2^64, that can be very expensive.
 
-
-
 // Computes a + b + c -> (s, c) where s is the sum and c is the carry.
 template<Digit D>
 std::pair<D, D>
@@ -387,7 +385,6 @@ add(D a, D b, D c)
   };
 }
 
-
 // Add two digits, returning the sum and carry.
 template<Digit D>
 std::pair<D, D>
@@ -395,7 +392,6 @@ add(D a, D b)
 {
   return add(a, b, D(0));
 }
-
 
 // Computes a - (b + c) -> (d, 0) if b + c < a. Otherwise, computes
 // (r + a) - (b + c) -> (d, 1). In both cases d is the difference of
@@ -425,7 +421,6 @@ sub(D a, D b, D c)
   }
 }
 
-
 // Equivalent to sub(a, b, 0).
 template<Digit D>
 std::pair<D, D>
@@ -433,7 +428,6 @@ sub(D a, D b)
 {
   return sub(a, b, D(0));
 }
-
 
 // Computes a * b -> (p, c) where p is the least significant digit in the
 // produce and c is the overflow digit. For example, multiplying the digits 
@@ -449,7 +443,6 @@ mul(D a, D b)
   };
 }
 
-
 // Computes a / b -> (q, r) where q is the quotient and r is the remainder
 // of division. For example, div(5, 2) yields (2, 1).
 template<Digit D>
@@ -458,7 +451,6 @@ div(D a, D b)
 {
   return {a / b, a % b};
 }
-
 
 // Computes 2n + c0 -> (p, c1) where c0 an input carry (0 or 1), p is the
 // least significant digit in the product) and c1 is the carry (0, 1).
@@ -475,7 +467,6 @@ twice(D n, D c)
     msd<D>(x) != 0 // The carry contains the shifted-off bit.
   };
 }
-
 
 // Computes (r0 * r) + n / 2 -> (q, r1) where r0 is an input remainder (0 or 1),
 // r is the radix of the digit, q is the quotient, and r1 is the remainder of 
@@ -508,7 +499,6 @@ is_odd(D n)
   return n & 1;
 }
 
-
 // Returns true if and only if the digit is even.
 template<Digit D>
 inline bool
@@ -517,6 +507,193 @@ is_even(D n)
   return !(n & 1);
 }
 
+
+// -------------------------------------------------------------------------- //
+// Digit Range Algorithms                                   [digit.algorithm] //
+//
+// The algorithms in this section are defined on sequences of digits delimited
+// by a pair of iterators. 
+//
+// TODO: Rewrite all of these to use iterators instead of pointers. Or ranges?
+
+
+// Returns the number of significant digits in a number. If sigdig(f, l) == n,
+// then the position of the most significant digit is n - 1.
+//
+// TODO: This algorithm has the wrong name, and probably does the wrong thing.
+// It might be better to simply return an iterator to the most significant
+// digit.
+template<Digit D>
+int
+sigdig(D* first, D* limit)
+{
+  while (limit != first) {
+    --limit;
+    if (*limit != D(0))
+      return limit - first + 1;
+  }
+  return 0;
+}
+
+// Initialize the digits in [first, limit) from the value n. This returns the
+// residual value of n computed from the initialization of digits. If the
+// number cannot be stored in limit - first digits, then the residue will
+// be non-zero.
+// 
+// If n is -1, then the resulting range will represent the maximum value for 
+// those digits.
+//
+// FIXME: This results spurious overflow if last - first < sizeof(T) * CHAR_BIT 
+// and n == -1 (unsigned)
+template<Digit D, Unsigned T>
+T
+fill_converted(D* first, D* limit, T n)
+{
+  // Handle the max case separately.
+  if (n == T(-1)) {
+    std::fill(first, limit, max<D>());
+    return 0;
+  }
+
+  while (first != limit && n != 0) {
+    *first++ = n % radix<D>();
+    n /= radix<D>();
+  }
+  std::fill(first, limit, D(0));
+  return n;
+}
+
+// Add a digit to the number in [first, last).
+template<Digit D>
+D
+add(D* out, D const* first, D const* limit, D n)
+{
+  D c = n;
+  while (first != limit) {
+    auto s = add(*first++, D(0), c);
+    *out++ = s.first;
+    c = s.second;
+  }
+  return c;
+}
+
+// Add the digits in [first1, first1 + n) to those in [first2, first2 + n) and 
+// store the results in [out, out + n). Returns the carry digit.
+template<Digit D>
+D
+add_n(D* out, D const* first1, D const* first2, int n)
+{
+  D c = 0;
+  while (n != 0) {
+    auto s = add(*first1++, *first2++, c);
+    *out++ = s.first;
+    c = s.second;
+    --n;
+  }
+  return c;
+}
+
+// Subtract the digits in [first2, first2 + n) from those in 
+// [first1, first1 + n) and store the results in [out, out + n). Returns a
+// borrowed digit.
+template<Digit D>
+D
+sub_n(D* out, D const* first1, D const* first2, int n)
+{
+  D b = 0;
+  while (n != 0) {
+    auto s = sub(*first1++, *first2++, b);
+    *out++ = s.first;
+    b = s.second;
+    --n;
+  }
+  return b;
+}
+
+// Multiply each digit in [first, limit) by n. Returns the final carry.
+template<Digit D>
+D
+mul(D* out, D const* first, D const* limit, D n)
+{
+  D c(0);
+  while (first != limit) {
+    auto p = mul(*first++, n);
+    auto s = add(p.first, c);
+    // TODO: I don't believe that the should ever actually carry. Prove it.
+    *out++ = s.first;
+    assert(s.second == 0); 
+    c = p.second + s.second;
+  }
+  return c;
+}
+
+// Shift k digits to the left.
+//
+// FIXME: This algorithm requires k * n shifts, although k <= digits<D>().
+// Still, it would be more effective to determine when digit copies are
+// sufficient and when shifts must actually be performed.
+//
+// TODO: Provide an overflow buffer to accept bits shifted out of the
+// representation.
+template<Digit D>
+void
+lsh_n(D* out, D const* in, int k, int n)
+{
+  assert(k < n);
+  while (k != 0) {
+    D c = 0;
+    while (n != 0) {
+      auto x = twice(*in++, c);
+      *out++ = x.first;
+      c = x.second;
+      --n;
+    }
+    --k;
+  }
+}
+
+// Shift k digits to the right. This shifts each digit starting from the
+// most significant and working toward the least. The remainder in each
+// shift is propagated to the next digit.
+//
+// TODO: Provide an overflow buffer to accept bits shifted out of the
+// representation.
+template<Digit D>
+void
+rsh_n(D* out, D const* in, int k, int n)
+{
+  while (k != 0) {
+    D const* limit = in + n;
+    D* out_limit = out + n;
+    D r = 0;
+    while (n != 0) {
+      auto x = half(*--limit, r);
+      *--out_limit = x.first;
+      r = x.second;
+      --n;
+    }
+    --k;
+  }
+}
+
+// Returns true if the digit sequence in [p - n, p) is lexicographically
+// less than that in [q - n, q). Digits are compared from the most significant
+// to the least.
+template<Digit D>
+bool
+less_n(D const* p, D const* q, int n)
+{
+  while (n != 0) {
+    --p;
+    --q;
+    if (*p < *q)
+      return true;
+    if (*q < *p)
+      return false;
+    --n;
+  }
+  return false;
+}
 
 } // namespace numeric
 } // namespace origin
