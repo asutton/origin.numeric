@@ -326,8 +326,7 @@ promote(D d)
 }
 
 
-// Returns a mask that will return the bits in the least significant digit of
-// the promoted type.
+// Returns a mask for the least significant digit in a promoted integer.
 template<Digit D, Integral T = promoted_type_t<D>>
 constexpr T
 lsd_mask()
@@ -336,8 +335,11 @@ lsd_mask()
 }
 
 
+// Returns the least significant digit of a promoted digit value.
+//
+// TODO: Actually get the constraint on this algorithm right.
 template<Digit D, Integral T>
-  requires Same_as<T, promoted_type_t<D>>()
+  // requires Same_as<T, promoted_type_t<D>>()
 constexpr typename D::storage_type
 lsd(T n)
 {
@@ -345,19 +347,24 @@ lsd(T n)
 }
 
 
+// Returns a mask for the most significant digit in a promoted integer.
 template<Digit D, Integral T = promoted_type_t<D>>
-constexpr typename D::storage_type
+constexpr T
 msd_mask()
 {
   return lsd_mask<D>() << bits((T)max<D>());
 }
 
+// Returns the most significant digit of a promoted digit value.
+//
+// TODO: Actually get the constraint on this algorithm right.
 template<Digit D, Integral T>
-  requires Same_as<T, promoted_type_t<D>>()
-constexpr T
+  // requires Same_as<T, promoted_type_t<D>>()
+constexpr typename D::storage_type
 msd(T n)
 {
-  return (n & msd_mask<D>()) >> ilog2(D::radix);
+  constexpr T log2 = ilog2(D::radix);
+  return (n & msd_mask<D>()) >> log2;
 }
 
 

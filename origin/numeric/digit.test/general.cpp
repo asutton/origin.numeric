@@ -7,8 +7,9 @@
 #include <vector>
 #include <iostream>
 
+// TODO: Make this a principled unit test (but how?).
 
-using namespace algo;
+using namespace origin::numeric;
 
 using digit4 = digit<4>;
 using digit10 = digit<10>;
@@ -32,6 +33,7 @@ void print_info()
   std::cout << "hi mask: " << std::bitset<N>(msd_mask<D>()) << '\n';
   std::cout << "-------------------\n";
 }
+
 
 template<Digit D>
 void print_info()
@@ -160,10 +162,10 @@ test_digit10()
 
 int main()
 {
-  // print_info<digit10>();
-  // print_info<digit16b>();
-  // print_info<digit24b>();
-  // print_info<digit32b>();
+  print_info<digit10>();
+  print_info<digit16b>();
+  print_info<digit24b>();
+  print_info<digit32b>();
 
   test_bit();
   test_digit4();

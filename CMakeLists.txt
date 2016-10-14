@@ -10,10 +10,9 @@ set(CMAKE_CXX_FLAGS "-std=c++1z -fconcepts")
 
 include_directories(.)
 
-# TODO: Move this into a position where it could be reused.
 macro(add_unit_test target)
   add_executable(${target} ${ARGN})
-  target_link_libraries(${target} graph)
+  target_link_libraries(${target} numeric)
   add_test(${target} ${target})
 endmacro()
 

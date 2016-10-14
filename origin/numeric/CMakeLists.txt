@@ -9,3 +9,4 @@ add_library(numeric
   ap_natural.cpp
 )
 
+add_subdirectory(digit.test)
