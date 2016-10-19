@@ -10,6 +10,7 @@
 namespace origin {
 namespace numeric {
 
+
 // -------------------------------------------------------------------------- //
 // Fixed precision natural numbers                               [natural.fp] //
 
@@ -42,10 +43,10 @@ struct fp_natural
 {
   using digit_type = digit<R>;
   using storage_type = std::array<digit_type, P>;
-  using iterator = typename storage_type::iterator;
-  using const_iterator = typename storage_type::const_iterator;
-  using reverse_iterator = typename storage_type::reverse_iterator;
-  using const_reverse_iterator = typename storage_type::const_reverse_iterator;
+  using iterator = digit_type*;
+  using const_iterator = digit_type const*;
+  using reverse_iterator = std::reverse_iterator<iterator>;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   fp_natural();
 
@@ -57,7 +58,7 @@ struct fp_natural
   fp_natural(fp_natural&&);
   fp_natural& operator=(fp_natural&&);
   
-  // Implicit widening.
+  // Widening.
   template<Nonzero P2>
     requires P2 < P
   fp_natural(fp_natural<P2, R> const&);
@@ -68,30 +69,40 @@ struct fp_natural
   ~fp_natural();
 
   // Digit access.
-  digit_type operator[](std::size_t n) const { return (*digs_)[n]; }
-  digit_type& operator[](std::size_t n) { return (*digs_)[n]; }
+  digit_type operator[](int n) const;
+  digit_type& operator[](int n);
 
   // Observers
-  constexpr std::size_t size() const { return P; }
+  constexpr int size() const;
+  constexpr int digits() const;
+  int sig_digits() const;
+
+  // Digit iterators
+  const_iterator begin_sig() const;
+  const_iterator end_sig() const;
+  iterator begin_sig();
+  iterator end_sig();
 
   // Iterators
-  const_iterator begin() const { return digs_->begin(); }
-  const_iterator end() const { return digs_->end(); }
-  iterator begin() { return digs_->begin(); }
-  iterator end() { return digs_->end(); }
+  const_iterator begin() const;
+  const_iterator end() const;
+  iterator begin();
+  iterator end();
   
-  const_reverse_iterator rbegin() const { return digs_->rbegin(); }
-  const_reverse_iterator rend() const { return digs_->rend(); }
-  reverse_iterator rbegin() { return digs_->rbegin(); }
-  reverse_iterator rend() { return digs_->rend(); }
-  
-  storage_type* digs_;
+  const_reverse_iterator rbegin() const;
+  const_reverse_iterator rend() const;
+  reverse_iterator rbegin();
+  reverse_iterator rend();
+
+  digit_type* lsd;  // Least signficant digit
+  digit_type* msd;  // Most significant digit
+  digit_type* pld;  // Past the last digit
 };
 
 // Initialize this value to 0.
 template<Nonzero P, Radix R>
 fp_natural<P, R>::fp_natural()
-  : digs_(new storage_type())
+  : lsd(new digit_type[P]), msd(lsd), pld(lsd + P)
 {
   std::fill(begin(), end(), digit_type(0));
 }
@@ -99,7 +110,9 @@ fp_natural<P, R>::fp_natural()
 // Initialize this value as a copy of n.
 template<Nonzero P, Radix R>
 fp_natural<P, R>::fp_natural(fp_natural const& n)
-  : digs_(new storage_type())
+  : lsd(new digit_type[P]), 
+    msd(lsd + n.sig_digits()), 
+    pld(lsd + P)
 {
   std::copy(n.begin(), n.end(), begin());
 }
@@ -109,31 +122,36 @@ template<Nonzero P, Radix R>
 fp_natural<P, R>&
 fp_natural<P, R>::operator=(fp_natural const& n)
 {
-  if (!digs_)
-    digs_ = new storage_type();
+  if (this == &n)
+    return *this;
+  delete lsd;
+  lsd = new digit_type[P];
+  msd = lsd + n.sig_digits();
+  pld = lsd + P;
   std::copy(n.begin(), n.end(), begin());
   return *this;
 }
 
 // Make this value that of n, and reset n.
-//
-// NOTE: This makes n invalid, but assignable and destructible. No other
-// operations are valid.
 template<Nonzero P, Radix R>
 fp_natural<P, R>::fp_natural(fp_natural&& n)
-  : digs_(n.digs_)
+  : lsd(std::exchange(n.lsd, nullptr)), 
+    msd(std::exchange(n.msd, nullptr)),
+    pld(std::exchange(n.pld, nullptr))
 {
-  n.digs_ = nullptr;
 }
 
 // Make this value that of n, and reset n.
-//
-// TODO: Consider stealing n's pointer.
 template<Nonzero P, Radix R>
 fp_natural<P, R>&
 fp_natural<P, R>::operator=(fp_natural&& n)
 {
-  std::swap(digs_, n.digs_);
+  if (this == &n)
+    return *this;
+  delete lsd;
+  lsd = std::exchange(n.lsd, nullptr);
+  msd = std::exchange(n.msd, nullptr);
+  pld = std::exchange(n.pld, nullptr);
   return *this;
 }
 
@@ -142,7 +160,9 @@ template<Nonzero P, Radix R>
 template<Nonzero P2>
   requires P2 < P
 fp_natural<P, R>::fp_natural(fp_natural<P2, R> const& n)
-  : digs_(new storage_type())
+  : lsd(new digit_type[P]),
+    msd(lsd + n.sig_digits()),
+    pld(lsd + P)
 {
   auto iter = std::copy(n.begin(), n.end(), begin()); 
   std::fill(iter, end(), digit_type(0));
@@ -151,19 +171,157 @@ fp_natural<P, R>::fp_natural(fp_natural<P2, R> const& n)
 // Support initialization from standard integer types.
 template<Nonzero P, Radix R>
 fp_natural<P, R>::fp_natural(std::uintmax_t n)
-  : digs_(new storage_type())
+  : lsd(new digit_type[P]),
+    pld(lsd + P)
 {
   n = fill_converted(begin(), end(), n);
   assert(n == 0);
+  msd = find_most_significant(begin(), end()) + 1;
 }
 
 // Reclaim memory used by the number.
 template<Nonzero P, Radix R>
 fp_natural<P, R>::~fp_natural()
 {
-  delete digs_;
+  delete lsd;
 }
 
+// Returns the nth digit in the number.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::operator[](int n) const -> digit_type
+{ 
+  return *(lsd + n);
+}
+
+// Returns the nth digit in the number.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::operator[](int n) -> digit_type&
+{ 
+  return *(lsd + n);
+}
+
+// Returns the total number of digits in the number, including leading zeros.
+template<Nonzero P, Radix R>
+constexpr int
+fp_natural<P, R>::size() const 
+{ 
+  return P; 
+}
+
+// Equivalent to size().
+template<Nonzero P, Radix R>
+constexpr int
+fp_natural<P, R>::digits() const
+{
+  return P;
+}
+
+// Returns the number of significant digits in the number. This is the number
+// of digits excluding leading zeros.
+template<Nonzero P, Radix R>
+int
+fp_natural<P, R>::sig_digits() const
+{
+  return msd - lsd;
+}
+
+// Returns an iterator referring to the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::begin_sig() const -> const_iterator
+{ 
+  return lsd;
+}
+
+// Returns an iterator past the most significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::end_sig() const -> const_iterator
+{ 
+  return msd;
+}
+
+// Returns an iterator referring to the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::begin_sig() -> iterator
+{ 
+  return lsd;
+}
+
+// Returns an iterator past the most significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::end_sig() -> iterator
+{ 
+  return msd;
+}
+
+// Returns an iterator referring to the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::begin() const -> const_iterator
+{ 
+  return lsd;
+}
+
+// Returns an iterator past the last digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::end() const -> const_iterator
+{ 
+  return pld;
+}
+
+// Returns an iterator referring to the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::begin() -> iterator
+{ 
+  return lsd;
+}
+
+// Returns an iterator past the last digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::end() -> iterator
+{ 
+  return pld;
+}
+
+// Returns a reverse iterator referring to the most significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rbegin() const -> const_reverse_iterator
+{ 
+  return const_reverse_iterator(pld);
+}
+
+// Returns a reverse iterator referring past the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rend() const -> const_reverse_iterator
+{ 
+  return const_reverse_iterator(lsd);
+}
+
+// Returns a reverse iterator referring to the most significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rbegin() -> reverse_iterator
+{ 
+  return reverse_iterator(pld);
+}
+
+// Returns a reverse iterator referring past the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rend() -> reverse_iterator
+{ 
+  return reverse_iterator(lsd);
+}
 
 // -------------------------------------------------------------------------- //
 // Comparison

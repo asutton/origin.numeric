@@ -10,3 +10,4 @@ add_library(numeric
 )
 
 add_subdirectory(digit.test)
+add_subdirectory(fp_natural.test)

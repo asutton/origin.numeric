@@ -526,20 +526,16 @@ is_even(D n)
 
 // Returns the number of significant digits in a number. If sigdig(f, l) == n,
 // then the position of the most significant digit is n - 1.
-//
-// TODO: This algorithm has the wrong name, and probably does the wrong thing.
-// It might be better to simply return an iterator to the most significant
-// digit.
 template<Digit D>
-int
-sigdig(D* first, D* limit)
+D*
+find_most_significant(D* first, D* limit)
 {
   while (limit != first) {
     --limit;
     if (*limit != D(0))
-      return limit - first + 1;
+      return limit;
   }
-  return 0;
+  return first;
 }
 
 // Initialize the digits in [first, limit) from the value n. This returns the
