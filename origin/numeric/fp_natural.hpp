@@ -77,11 +77,16 @@ struct fp_natural
   constexpr int digits() const;
   int sig_digits() const;
 
-  // Digit iterators
+  // Significant digit iterators
   const_iterator begin_sig() const;
   const_iterator end_sig() const;
   iterator begin_sig();
   iterator end_sig();
+
+  const_reverse_iterator rbegin_sig() const;
+  const_reverse_iterator rend_sig() const;
+  reverse_iterator rbegin_sig();
+  reverse_iterator rend_sig();
 
   // Iterators
   const_iterator begin() const;
@@ -227,6 +232,8 @@ fp_natural<P, R>::sig_digits() const
   return msd - lsd;
 }
 
+// Significant digit iterators
+
 // Returns an iterator referring to the least significant digit.
 template<Nonzero P, Radix R>
 auto
@@ -259,7 +266,41 @@ fp_natural<P, R>::end_sig() -> iterator
   return msd;
 }
 
-// Returns an iterator referring to the least significant digit.
+// Returns a reverse iterator referring to the most significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rbegin_sig() const -> const_reverse_iterator
+{ 
+  return const_reverse_iterator(msd);
+}
+
+// Returns a reverse iterator before the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rend_sig() const -> const_reverse_iterator
+{ 
+  return const_reverse_iterator(lsd);
+}
+
+// Returns a reverse iterator referring to the most significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rbegin_sig() -> reverse_iterator
+{ 
+  return reverse_iterator(msd);
+}
+
+// Returns a reverse iterator before the least significant digit.
+template<Nonzero P, Radix R>
+auto
+fp_natural<P, R>::rend_sig() -> reverse_iterator
+{ 
+  return reverse_iterator(lsd);
+}
+
+// Digit iterators
+
+// Returns an iterator referring to the first digit.
 template<Nonzero P, Radix R>
 auto
 fp_natural<P, R>::begin() const -> const_iterator
@@ -275,7 +316,7 @@ fp_natural<P, R>::end() const -> const_iterator
   return pld;
 }
 
-// Returns an iterator referring to the least significant digit.
+// Returns an iterator referring to the first digit.
 template<Nonzero P, Radix R>
 auto
 fp_natural<P, R>::begin() -> iterator
@@ -291,7 +332,7 @@ fp_natural<P, R>::end() -> iterator
   return pld;
 }
 
-// Returns a reverse iterator referring to the most significant digit.
+// Returns a reverse iterator referring to the last digit.
 template<Nonzero P, Radix R>
 auto
 fp_natural<P, R>::rbegin() const -> const_reverse_iterator
@@ -299,7 +340,7 @@ fp_natural<P, R>::rbegin() const -> const_reverse_iterator
   return const_reverse_iterator(pld);
 }
 
-// Returns a reverse iterator referring past the least significant digit.
+// Returns a reverse iterator before the first digit.
 template<Nonzero P, Radix R>
 auto
 fp_natural<P, R>::rend() const -> const_reverse_iterator
@@ -307,7 +348,7 @@ fp_natural<P, R>::rend() const -> const_reverse_iterator
   return const_reverse_iterator(lsd);
 }
 
-// Returns a reverse iterator referring to the most significant digit.
+// Returns a reverse iterator referring to the last digit.
 template<Nonzero P, Radix R>
 auto
 fp_natural<P, R>::rbegin() -> reverse_iterator
@@ -315,7 +356,7 @@ fp_natural<P, R>::rbegin() -> reverse_iterator
   return reverse_iterator(pld);
 }
 
-// Returns a reverse iterator referring past the least significant digit.
+// Returns a reverse iterator before the first digit.
 template<Nonzero P, Radix R>
 auto
 fp_natural<P, R>::rend() -> reverse_iterator
@@ -323,52 +364,60 @@ fp_natural<P, R>::rend() -> reverse_iterator
   return reverse_iterator(lsd);
 }
 
-// -------------------------------------------------------------------------- //
-// Comparison
 
-template<Nonzero P, Radix R>
+// -------------------------------------------------------------------------- //
+// Comparison 
+
+// Returns true when a is equal to b. This is the case when a and b have the 
+// same significant digits.
+template<Nonzero P1, Nonzero P2, Radix R>
 inline bool
-operator==(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
+operator==(fp_natural<P1, R> const& a, fp_natural<P2, R> const& b)
 {
-  return std::equal(a.begin(), a.end(), b.begin());
+  return std::equal(a.begin_sig(), a.end_sig(), 
+                    b.begin_sig(), b.end_sig());
 }
 
-
-template<Nonzero P, Radix R>
+template<Nonzero P1, Nonzero P2, Radix R>
 inline bool
-operator!=(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
+operator!=(fp_natural<P1, R> const& a, fp_natural<P2, R> const& b)
 {
   return !(a == b);
 }
 
-
-template<Nonzero P, Radix R>
+// Returns true if a is less than b. This is true when a has fewer significant
+// digits, false when a has more significant digits, or otherwise the result 
+// of lexicographically comparing the significant digits of a and b in reverse
+// order.
+template<Nonzero P1, Nonzero P2, Radix R>
 inline bool
-operator<(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
+operator<(fp_natural<P1, R> const& a, fp_natural<P2, R> const& b)
 {
-  return less_n(a.end(), b.end(), P);
+  if (a.sig_digits() < b.sig_digits())
+    return true;
+  if (b.sig_digits() < a.sig_digits())
+    return false;
+  return std::lexicographical_compare(a.rbegin_sig(), a.rend_sig(),
+                                      b.rbegin_sig(), a.rend_sig());
 }
 
-
-template<Nonzero P, Radix R>
+template<Nonzero P1, Nonzero P2, Radix R>
 inline bool
-operator>(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
+operator>(fp_natural<P1, R> const& a, fp_natural<P2, R> const& b)
 {
   return b < a;
 }
 
-
-template<Nonzero P, Radix R>
+template<Nonzero P1, Nonzero P2, Radix R>
 inline bool
-operator<=(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
+operator<=(fp_natural<P1, R> const& a, fp_natural<P2, R> const& b)
 {
   return !(b < a);
 }
 
-
-template<Nonzero P, Radix R>
+template<Nonzero P1, Nonzero P2, Radix R>
 inline bool
-operator>=(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
+operator>=(fp_natural<P1, R> const& a, fp_natural<P2, R> const& b)
 {
   return !(a < b);
 }

@@ -3,3 +3,4 @@
 
 add_unit_test(test-fpnat-default default.cpp)
 add_unit_test(test-fpnat-value value.cpp)
+add_unit_test(test-fpnat-relation relation.cpp)
