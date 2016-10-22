@@ -566,10 +566,10 @@ fill_converted(D* first, D* limit, T n)
   return n;
 }
 
-// Add a digit to the number in [first, last).
+// Add the digit n to the number represented in [first, last).
 template<Digit D>
 D
-add(D* out, D const* first, D const* limit, D n)
+add_digit(D* out, D const* first, D const* limit, D n)
 {
   D c = n;
   while (first != limit) {
@@ -580,19 +580,27 @@ add(D* out, D const* first, D const* limit, D n)
   return c;
 }
 
-// Add the digits in [first1, first1 + n) to those in [first2, first2 + n) and 
+// Add the digits in [first1, limit1) to those in [first2, limit2) and 
 // store the results in [out, out + n). Returns the carry digit.
+//
+// TODO: Develop precise aliasing requirements for first1, first2, and out.
 template<Digit D>
 D
-add_n(D* out, D const* first1, D const* first2, int n)
+add_digits(D* out_first, D* out_limit, 
+           D const* first1, D const* limit1, 
+           D const* first2, D const* limit2)
 {
   D c = 0;
-  while (n != 0) {
+  while (first1 != limit1 && first2 != limit2) {
     auto s = add(*first1++, *first2++, c);
     *out++ = s.first;
     c = s.second;
-    --n;
   }
+
+  if (first1 != limit1) {
+
+  }
+
   return c;
 }
 

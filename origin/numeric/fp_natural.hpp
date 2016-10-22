@@ -442,14 +442,17 @@ is_even(fp_natural<P, R> const& n)
   return is_even(n[0]);
 }
 
+
 // -------------------------------------------------------------------------- //
 // Addition and subtraction
 
+// TODO: Check for overflow before adding.
 template<Nonzero P, Radix R>
 fp_natural<P, R>&
 operator+=(fp_natural<P, R>& r, fp_natural<P, R> const& n)
 {
-  add_n(r.begin(), r.begin(), n.begin(), P);
+  D c = add_digits(r.begin(), r.begin(), n.begin(), P);
+  assert(c == D(0));
   return r;
 }
 
