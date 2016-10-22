@@ -15,7 +15,7 @@ int main()
 {
   fp_natural<4, 10> n1 = 10;
   fp_natural<4, 10> n2 = 20;
-  std::cout << n1 << ' ' << n2 << '\n';
+  // std::cout << n1 << ' ' << n2 << '\n';
   assert(n1 == n1);
   assert(n1 != n2);
   assert(n1 < n2);

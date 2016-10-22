@@ -63,7 +63,7 @@ void test_add(D* first, D* limit)
   std::cout << "addition\n";
   for (D* i = first; i != limit; ++i) {
     for (D* j = first; j != limit; ++j)
-      std::cout << *i << " + " << *j << " == " << add(*i, *j) << '\n';
+      std::cout << *i << " + " << *j << " == " << add_digits(*i, *j) << '\n';
   }
 }
 

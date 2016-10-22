@@ -6,6 +6,7 @@
 
 #include <origin/numeric/number.hpp>
 
+#include <iostream>
 
 namespace origin {
 namespace numeric {
@@ -76,6 +77,9 @@ struct fp_natural
   constexpr int size() const;
   constexpr int digits() const;
   int sig_digits() const;
+
+  // Assignment
+  fp_natural& operator+=(fp_natural const&);
 
   // Significant digit iterators
   const_iterator begin_sig() const;
@@ -398,7 +402,7 @@ operator<(fp_natural<P1, R> const& a, fp_natural<P2, R> const& b)
   if (b.sig_digits() < a.sig_digits())
     return false;
   return std::lexicographical_compare(a.rbegin_sig(), a.rend_sig(),
-                                      b.rbegin_sig(), a.rend_sig());
+                                      b.rbegin_sig(), b.rend_sig());
 }
 
 template<Nonzero P1, Nonzero P2, Radix R>
@@ -446,14 +450,29 @@ is_even(fp_natural<P, R> const& n)
 // -------------------------------------------------------------------------- //
 // Addition and subtraction
 
+// Add n to this number.
+//
+// This adds the digits of n to the digits of r, storing the result in r.
+// All remaining digits are zeroed and the most significant digit is updated.
+//
 // TODO: Check for overflow before adding.
 template<Nonzero P, Radix R>
 fp_natural<P, R>&
-operator+=(fp_natural<P, R>& r, fp_natural<P, R> const& n)
+fp_natural<P, R>::operator+=(fp_natural<P, R> const& n)
 {
-  D c = add_digits(r.begin(), r.begin(), n.begin(), P);
-  assert(c == D(0));
-  return r;
+  // Add significant only digits.
+  auto r1 = add_significant_digits(begin(), 
+                                   begin_sig(), end_sig(), 
+                                   n.begin_sig(), n.end_sig());
+  
+  // Apply the carry to zero-fill remaining non-significant digits.
+  auto r2 = add_overflow_digit(r1.first, r1.first, end(), r1.second);
+  assert(r2.second == digit_type(0));
+
+  // Update the msd pointer.
+  msd = find_most_significant(begin(), r1.first + 1) + 1;
+
+  return *this;
 }
 
 

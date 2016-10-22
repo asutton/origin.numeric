@@ -7,7 +7,13 @@
 #include <vector>
 #include <iostream>
 
+int 
+main() 
+{
 
+}
+
+#if 0
 using namespace algo;
 
 
@@ -197,3 +203,4 @@ int main()
   // test_binary();
   // test_ap();
 }
+#endif

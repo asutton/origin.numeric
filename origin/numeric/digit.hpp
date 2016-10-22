@@ -27,6 +27,9 @@
 #include <type_traits>
 #include <iosfwd>
 
+#include <iostream>
+#include <bitset>
+
 
 namespace origin {
 namespace numeric {
@@ -379,25 +382,33 @@ msd(T n)
 // a runtime cost for extending integers. This probably negligible for small
 // digits, but when r is 2^32 or 2^64, that can be very expensive.
 
+// Zero-fill the digits in the range [f, l).
+template<Digit D>
+void 
+zero_digits(D* f, D* l)
+{
+  std::fill(f, l, D(0));
+}
+
 // Computes a + b + c -> (s, c) where s is the sum and c is the carry.
 template<Digit D>
 std::pair<D, D>
-add(D a, D b, D c)
+add_digits(D a, D b, D c)
 {
   assert(c <= 1);
   auto x = promote(a) + promote(b) + c;
-  return {
-    lsd<D>(x),     // The sum is the bits in the lsd
-    msd<D>(x) != 0 // The carry is 1 if any bits are in the msd
-  };
+  if (x > max<D>())
+    return {x - radix<D>(), D(1)};
+  else 
+    return {x, D(0)};
 }
 
 // Add two digits, returning the sum and carry.
 template<Digit D>
 std::pair<D, D>
-add(D a, D b)
+add_digits(D a, D b)
 {
-  return add(a, b, D(0));
+  return add_digits(a, b, D(0));
 }
 
 // Computes a - (b + c) -> (d, 0) if b + c < a. Otherwise, computes
@@ -523,7 +534,6 @@ is_even(D n)
 //
 // TODO: Rewrite all of these to use iterators instead of pointers. Or ranges?
 
-
 // Returns the number of significant digits in a number. If sigdig(f, l) == n,
 // then the position of the most significant digit is n - 1.
 template<Digit D>
@@ -566,42 +576,52 @@ fill_converted(D* first, D* limit, T n)
   return n;
 }
 
-// Add the digit n to the number represented in [first, last).
+// Add the digit n to the number represented in [first, last), storing
+// the output in [out, out + (last - first)). Returns a pair containing
+// the iterator out + (last - first) and the carry.
+//
+// This is equivalent to adding the number in [first, last) to an equally 
+// long sequence of zeros, using n as the initial carry.
+//
+// This operation requires exactly limit - first calls to add_digit().
 template<Digit D>
-D
-add_digit(D* out, D const* first, D const* limit, D n)
+std::pair<D*, D>
+add_overflow_digit(D* out, D const* first, D const* limit, D n)
 {
-  D c = n;
+  std::pair<D, D> result{D(0), n};
   while (first != limit) {
-    auto s = add(*first++, D(0), c);
-    *out++ = s.first;
-    c = s.second;
+    result = add_digits(*first++, D(0), result.second);
+    *out++ = result.first;
   }
-  return c;
+  return {out, result.second};
 }
 
-// Add the digits in [first1, limit1) to those in [first2, limit2) and 
-// store the results in [out, out + n). Returns the carry digit.
+// Add the significant digits in [fi1, li1) to those in [fi2, li2) and store 
+// the results in the sequence of digits [out, out + max(li1 - fi1, li2 - fi2)). 
+// Returns a pair containing the iterator past the last computed digit and
+// the overflow carry.
 //
-// TODO: Develop precise aliasing requirements for first1, first2, and out.
+// TODO: Develop precise aliasing requirements for fi1, fi2, and out.
 template<Digit D>
-D
-add_digits(D* out_first, D* out_limit, 
-           D const* first1, D const* limit1, 
-           D const* first2, D const* limit2)
+std::pair<D*, D>
+add_significant_digits(D* out,
+                       D const* fi1, D const* li1, 
+                       D const* fi2, D const* li2)
 {
-  D c = 0;
-  while (first1 != limit1 && first2 != limit2) {
-    auto s = add(*first1++, *first2++, c);
-    *out++ = s.first;
-    c = s.second;
+  // Add the shared number of significant digits.
+  std::pair<D, D> result;
+  while (fi1 != li1 && fi2 != li2) {
+    result = add_digits(*fi1++, *fi2++, result.second);
+    *out++ = result.first;
   }
 
-  if (first1 != limit1) {
-
-  }
-
-  return c;
+  // Add the remaining digits in the larger sequence.
+  if (fi1 != li1)
+    return add_overflow_digit(out, fi1, li1, result.second);
+  else if (fi2 != li2)
+    return add_overflow_digit(out, fi2, li2, result.second);
+  else
+    return {out, result.second};
 }
 
 // Subtract the digits in [first2, first2 + n) from those in 
