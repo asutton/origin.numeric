@@ -80,6 +80,7 @@ struct fp_natural
 
   // Assignment
   fp_natural& operator+=(fp_natural const&);
+  fp_natural& operator-=(fp_natural const&);
 
   // Significant digit iterators
   const_iterator begin_sig() const;
@@ -455,23 +456,18 @@ is_even(fp_natural<P, R> const& n)
 // This adds the digits of n to the digits of r, storing the result in r.
 // All remaining digits are zeroed and the most significant digit is updated.
 //
-// TODO: Check for overflow before adding.
+// TODO: Check for overflow before adding. We'll need a max value to do
+// that without overflowing.
 template<Nonzero P, Radix R>
 fp_natural<P, R>&
 fp_natural<P, R>::operator+=(fp_natural<P, R> const& n)
 {
-  // Add significant only digits.
   auto r1 = add_significant_digits(begin(), 
                                    begin_sig(), end_sig(), 
                                    n.begin_sig(), n.end_sig());
-  
-  // Apply the carry to zero-fill remaining non-significant digits.
   auto r2 = add_overflow_digit(r1.first, r1.first, end(), r1.second);
   assert(r2.second == digit_type(0));
-
-  // Update the msd pointer.
   msd = find_most_significant(begin(), r1.first + 1) + 1;
-
   return *this;
 }
 
@@ -487,10 +483,15 @@ operator+(fp_natural<P, R> const& a, fp_natural<P, R> const& b)
 
 template<Nonzero P, Radix R>
 fp_natural<P, R>&
-operator-=(fp_natural<P, R>& r, fp_natural<P, R> const& n)
+fp_natural<P, R>::operator-=(fp_natural<P, R> const& n)
 {
-  sub_n(r.begin(), r.begin(), n.begin(), P);
-  return r;
+  assert(n <= *this);
+  auto r1 = subtract_significant_digits(begin(), 
+                                        begin_sig(), end_sig(), 
+                                        n.begin_sig(), n.end_sig());
+  auto r2 = subtract_left_overflow_digit(r1.first, r1.first, end(), r1.second);
+  msd = find_most_significant(begin(), r1.first + 1) + 1;
+  return *this;
 }
 
 

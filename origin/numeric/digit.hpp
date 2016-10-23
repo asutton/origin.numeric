@@ -418,33 +418,27 @@ add_digits(D a, D b)
 // Note that this is implemented using the Austrian method for subtraction. 
 template<Digit D>
 std::pair<D, D>
-sub(D a, D b, D c)
+subtract_digits(D a, D b, D c)
 {
   assert(c <= D(1));
   auto p = promote(a);
   auto q = promote(b) + promote(c);
   if (p >= q) {
     auto x = p - q;
-    return { 
-      lsd<D>(x), // Result of subtraction
-      D(0)       // Did not borrow.
-    };
+    return {x, D(0)};
   }
   else {
     auto x = p + radix<D>() - q;
-    return { 
-      lsd<D>(x), // Result of subtraction
-      D(1)       // Did borrow.
-    };
+    return {x, D(1)};
   }
 }
 
 // Equivalent to sub(a, b, 0).
 template<Digit D>
 std::pair<D, D>
-sub(D a, D b)
+subtract_digits(D a, D b)
 {
-  return sub(a, b, D(0));
+  return subtract_digits(a, b, D(0));
 }
 
 // Computes a * b -> (p, c) where p is the least significant digit in the
@@ -586,11 +580,11 @@ fill_converted(D* first, D* limit, T n)
 // This operation requires exactly limit - first calls to add_digit().
 template<Digit D>
 std::pair<D*, D>
-add_overflow_digit(D* out, D const* first, D const* limit, D n)
+add_overflow_digit(D* out, D const* f, D const* l, D n)
 {
   std::pair<D, D> result{D(0), n};
-  while (first != limit) {
-    result = add_digits(*first++, D(0), result.second);
+  while (f != l) {
+    result = add_digits(*f++, D(0), result.second);
     *out++ = result.first;
   }
   return {out, result.second};
@@ -609,7 +603,7 @@ add_significant_digits(D* out,
                        D const* fi2, D const* li2)
 {
   // Add the shared number of significant digits.
-  std::pair<D, D> result;
+  std::pair<D, D> result{D(0), D(0)};
   while (fi1 != li1 && fi2 != li2) {
     result = add_digits(*fi1++, *fi2++, result.second);
     *out++ = result.first;
@@ -624,21 +618,62 @@ add_significant_digits(D* out,
     return {out, result.second};
 }
 
-// Subtract the digits in [first2, first2 + n) from those in 
-// [first1, first1 + n) and store the results in [out, out + n). Returns a
-// borrowed digit.
+// Subtract from the digits in [f, l) an equally long sequence of 0 digits,
+// with n being the initial borrow. The subtracted digits are stored in
+// [out, out + (f - l)). Returns a pair containing the iterator past the
+// last compute out iterator and an overflow borrow digit.
+//
+// If x is the number in [f, l), this computes x - 0 borrow n.
 template<Digit D>
-D
-sub_n(D* out, D const* first1, D const* first2, int n)
+std::pair<D*, D>
+subtract_left_overflow_digit(D* out, D const* f, D const* l, D n)
 {
-  D b = 0;
-  while (n != 0) {
-    auto s = sub(*first1++, *first2++, b);
-    *out++ = s.first;
-    b = s.second;
-    --n;
+  std::pair<D, D> result{D(0), n};
+  while (f != l) {
+    result = subtract_digits(*f++, D(0), result.second);
+    *out++ = result.first;
   }
-  return b;
+  return {out, result.second};
+}
+
+// Subtract the digits in [f, l) from an equally long sequence of 0 digits
+// with n being an initial borrow. The subtracted digits are stored in
+// [out, out + (f - l)). Returns a pair containing the iterator past the
+// last compute out iterator and an overflow borrow digit.
+//
+// If x is the number in [f, l), this computes 0 - x borrow n.
+template<Digit D>
+std::pair<D*, D>
+subtract_right_overflow_digit(D* out, D const* f, D const* l, D n)
+{
+  std::pair<D, D> result{D(0), n};
+  while (f != l) {
+    result = subtract_digits(D(0), *f++, result.second);
+    *out++ = result.first;
+  }
+  return {out, result.second};
+}
+
+// Subtract the significant digits in [fi2, li2) from those in [fi1, li1 + n) 
+// and store the results in [out, out max(li1 - fi1, li2 - fi2)). 
+template<Digit D>
+std::pair<D*, D>
+subtract_significant_digits(D* out, 
+                            D const* fi1, D const* li1, 
+                            D const* fi2, D const* li2)
+{
+  std::pair<D, D> result{D(0), D(0)};
+  while (fi1 != li1 && fi2 != li2) {
+    result = subtract_digits(*fi1++, *fi2++, result.second);
+    *out++ = result.first;
+  }
+
+  if (fi1 != li1)
+    return subtract_left_overflow_digit(out, fi1, li1, result.second);
+  else if (fi2 != li2)
+    return subtract_right_overflow_digit(out, fi2, li2, result.second);
+  else
+    return {out, result.second};
 }
 
 // Multiply each digit in [first, limit) by n. Returns the final carry.
